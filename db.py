@@ -85,6 +85,8 @@ def database_is_ready() -> bool:
             tuple(required_tables),
         )
         existing_tables = {row[0] for row in rows}
+    except Exception as e:
+        print(f"Error checking database tables: {e}")
     finally:
         connection.close()
     return existing_tables == required_tables
@@ -137,7 +139,7 @@ def main():
         dev_mode()
         return
 
-    initialize_database()
+    initialize_database() # SQL schema already has "IF EXISTS" clauses in case the tables already exist
     if not database_is_ready():
         raise RuntimeError("Database initialization verification failed.")
     print("Database verification passed.")
