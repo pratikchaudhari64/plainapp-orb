@@ -5,9 +5,13 @@ from __future__ import annotations
 import os
 import sqlite3
 import argparse
+import logging
 from pathlib import Path
 
 from dotenv import load_dotenv
+
+
+logger = logging.getLogger(__name__)
 
 
 PROJECT_DIR = Path(__file__).resolve().parent
@@ -91,34 +95,46 @@ def database_is_ready() -> bool:
         connection.close()
     return existing_tables == required_tables
 
-def dev_mode():
-    """Print the current database tables and their schema information."""
+def _get_schema() -> str:
     tables = execute_query(
-        """
-        SELECT name, sql
-        FROM sqlite_master
-        WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
-        ORDER BY name
-        """
-    )
-
+            """
+            SELECT name, sql
+            FROM sqlite_master
+            WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+            ORDER BY name
+            """
+        )
+    
     if not tables:
         print("No application tables found.")
-        return
+        return ""
 
+    schema_output = []
     for table in tables:
-        print(f"\nTABLE: {table['name']}")
-        print(table["sql"])
-        print("COLUMNS:")
+        schema_output.append(f"\nTABLE: {table['name']}")
+        schema_output.append(table["sql"])
+        schema_output.append("COLUMNS:")
 
         columns = execute_query(
             f'PRAGMA table_info("{table["name"]}")'
         )
         for column in columns:
-            print(
+            schema_output.append(
                 f"  {column['name']} {column['type']}"
                 f" {'NOT NULL' if column['notnull'] else 'NULL'}"
             )
+    return "\n".join(schema_output)
+
+def dev_mode():
+    """test dev queries"""
+
+    # print(_get_schema())
+    # query to list all rows from the table topics.
+    # not just row object, but include all column values for each row.
+    rows = execute_query("SELECT * FROM topics")
+    for row in rows:
+        print(tuple(row))
+
 
 def main():
     parser = argparse.ArgumentParser(description="PlainWatch database utility")

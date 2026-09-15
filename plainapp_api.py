@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import os
+import re
+import logging
+from functools import wraps
 from typing import Any
 
 import requests
@@ -10,6 +13,25 @@ from dotenv import load_dotenv
 
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
+
+
+class PlainAppUnavailable(RuntimeError):
+    """Raised when PlainApp cannot accept API requests."""
+
+
+def require_plainapp_health(method):
+    """Prevent an API method from running while PlainApp is unavailable."""
+    @wraps(method)
+    def wrapper(self, *args, **kwargs):
+        health = self.health_check()
+        if health["status_code"] != 200:
+            logger.warning("PlainApp request blocked: %s", health["message"])
+            raise PlainAppUnavailable(health["message"])
+        return method(self, *args, **kwargs)
+
+    return wrapper
 
 
 class PlainAppAPI:
@@ -34,7 +56,8 @@ class PlainAppAPI:
             "Content-Type": "application/json",
         }
 
-    def graphql(
+    @require_plainapp_health
+    def make_graphql_request(
         self,
         query: str,
         variables: dict[str, Any] | None = None,
@@ -56,6 +79,41 @@ class PlainAppAPI:
         if result.get("errors"):
             raise RuntimeError(result["errors"])
         return result
+
+    #TODO: could be turned into a decorator
+    def health_check(self) -> dict[str, Any]:
+        """Check whether the PlainApp HTTP server is reachable."""
+        try:
+            response = requests.get(
+                f"{self.graphql_url.rsplit('/', 1)[0]}/health",
+                timeout=5,
+            )
+        except requests.RequestException as e:
+            error_text = str(e)
+            host_match = re.search(
+                r"HTTPConnectionPool\(host='([^']+)'",
+                error_text,
+            )
+            host = host_match.group(1) if host_match else "unknown host"
+
+            if "ConnectTimeoutError" in error_text:
+                message = f"PlainApp host {host} is unreachable or timed out."
+            elif "Connection refused" in error_text:
+                message = f"PlainApp host {host} is reachable, but PlainApp is off."
+            else:
+                message = f"PlainApp health check failed for host {host}."
+
+            return {
+                "ok": False,
+                "status_code": None,
+                "message": message,
+            }
+        
+        return {
+            "ok": response.ok,
+            "status_code": response.status_code,
+            "message": response.text,
+        }
 
     def inspect_type_properties(self, type_name: str) -> dict[str, Any]:
         """Return the properties exposed by a GraphQL type on this server.
@@ -97,7 +155,10 @@ class PlainAppAPI:
             }
         }
         """
-        type_info = self.graphql(query, {"typeName": type_name})["data"]["__type"]
+        type_info = self.make_graphql_request(
+            query,
+            {"typeName": type_name},
+        )["data"]["__type"]
         if type_info is None:
             raise ValueError(f"GraphQL type does not exist: {type_name}")
         return type_info
@@ -109,7 +170,10 @@ class PlainAppAPI:
             syncFeeds(id: $id)
         }
         """
-        return self.graphql(query, {"id": feed_id})["data"]["syncFeeds"]
+        return self.make_graphql_request(
+            query,
+            {"id": feed_id},
+        )["data"]["syncFeeds"]
 
     def fetch_feed_content(self, feed_entry_id: str) -> dict[str, Any]:
         """Fetch and return the full article body for one feed entry."""
@@ -118,7 +182,7 @@ class PlainAppAPI:
             fetchFeedContent(id: $id) { id content }
         }
         """
-        return self.graphql(
+        return self.make_graphql_request(
             query,
             {"id": feed_entry_id},
         )["data"]["fetchFeedContent"]
@@ -141,7 +205,7 @@ class PlainAppAPI:
         offset = 0
 
         while True:
-            page = self.graphql(
+            page = self.make_graphql_request(
                 query,
                 {"offset": offset, "limit": page_size, "query": query_text},
             )["data"]["feedEntries"]
@@ -172,7 +236,7 @@ class PlainAppAPI:
         offset = 0
 
         while True:
-            page = self.graphql(
+            page = self.make_graphql_request(
                 query,
                 {"offset": offset, "limit": page_size, "query": query_text},
             )["data"]["notes"]
@@ -190,7 +254,10 @@ class PlainAppAPI:
             }
         }
         """
-        return self.graphql(query, {"id": note_id})["data"]["note"]
+        return self.make_graphql_request(
+            query,
+            {"id": note_id},
+        )["data"]["note"]
 
     def save_note(
         self,
@@ -208,7 +275,7 @@ class PlainAppAPI:
             "id": note_id,
             "input": {"title": title, "content": content},
         }
-        return self.graphql(query, variables)["data"]["saveNote"]
+        return self.make_graphql_request(query, variables)["data"]["saveNote"]
 
     def create_note(self, title: str, content: str) -> dict[str, Any]:
         """Create a new PlainApp note and return its identity."""
@@ -222,11 +289,15 @@ if __name__ == "__main__":
     plainapp = PlainAppAPI()
     # print(plainapp.inspect_type_properties("Note"))
     
+    notes = plainapp.list_notes()
+    for note in notes:
+        print(f" {note['id']} | {note['title'][:5]} | {note['tags']} | {note['updatedAt']} | {note['createdAt']} | {note['deletedAt']}")
+    
     # save_response = plainapp.save_note(note_id="", 
     #                                 title="Sample Title",
     #                                 content="Sample Content")
     # print(save_response)
     
-    notes = plainapp.list_notes()
-    for note in notes:
-        print(f" {note['id']} | {note['title'][:5]} | {note['tags']} | {note['updatedAt']} | {note['createdAt']} | {note['deletedAt']}")
+    # notes = plainapp.list_notes()
+    # for note in notes:
+    #     print(f" {note['id']} | {note['title'][:5]} | {note['tags']} | {note['updatedAt']} | {note['createdAt']} | {note['deletedAt']}")
