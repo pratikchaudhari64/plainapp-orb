@@ -9,6 +9,9 @@ import logging
 import hashlib
 from logging.handlers import RotatingFileHandler
 from datetime import datetime, timezone
+from pathlib import Path
+
+Path(".logs").mkdir(exist_ok=True)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -47,15 +50,13 @@ def refresh_feed_items():
 
 def fetch_tracking_notes():
     """Return active notes tagged tracking_stuff with a to_track line."""
-    # TODO: paginate notes.list(query="")
     all_nonTrashed_notes = plainapp.list_notes()
-    # TODO: filter notes without the tracking tag.
+    
     tracking_notes = [
         note for note in all_nonTrashed_notes
         if any(tag["name"] == TRACKING_TAG for tag in note.get("tags", []))
     ]
     
-    # TODO: return note id, title, content, updated time, and tags.
     return tracking_notes
 
 
@@ -64,35 +65,6 @@ def hash_seed(content):
     seed_content = content.split(AUTO_GENERATED_MARKER, 1)[0].strip()
     logger.info("Seed content for hashing:\n%s", seed_content)
     return hashlib.sha256(seed_content.encode("utf-8")).hexdigest()
-
-
-def extract_seed_text(content):
-    """Extract the user's to_track text from the note body."""
-    # TODO: parse the to_track line and validate the note format.
-    pass
-
-
-def derive_keywords(seed_text):
-    """Return the fixed keyword universe for a topic."""
-    # TODO: implement the initial keyword derivation/configuration approach.
-    pass
-
-
-def reconcile_topic(note):
-    """Upsert one note into topics and enqueue it when eligible."""
-    # TODO: calculate the seed hash and keyword JSON.
-    # TODO: insert new topics as WAITING_TO_HANDOFF.
-    # TODO: re-seed changed topics and enqueue them.
-    # TODO: turn eligible IDLE topics into WAITING_TO_HANDOFF.
-    # TODO: mark topics STOPPED when their note is deleted or untagged.
-    pass
-
-
-def complete_finished_cycles(now):
-    """Move completed topics through cooldown and back to IDLE."""
-    # TODO: find CYCLE_COMPLETE rows.
-    # TODO: set last_run_at, compute next_eligible_at, and set IDLE.
-    pass
 
 
 def poll():
@@ -159,6 +131,7 @@ def run_forever():
             poll_resp = poll()
             runs += 1
             logger.info("Completed poll iteration #%s with response: %s", runs, poll_resp)
+            logger.info(f"program retrying in next: {POLL_INTERVAL_SECONDS} seconds...")
         except Exception as error:
             logger.error(
                 "Poll iteration failed. Error: %s",

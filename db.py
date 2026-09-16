@@ -129,6 +129,11 @@ def dev_mode():
     """test dev queries"""
 
     # print(_get_schema())
+    db_resp = execute_query(
+        "UPDATE topics SET status = ?",
+        ("WAITING_TO_HANDOFF",),
+    )
+    print(db_resp, "\n")
     # query to list all rows from the table topics.
     # not just row object, but include all column values for each row.
     rows = execute_query("SELECT * FROM topics")

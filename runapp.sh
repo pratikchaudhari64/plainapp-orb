@@ -18,5 +18,21 @@ echo "Initializing PlainWatch database..."
 python "$script_dir/db.py" --initialize
 
 echo "Starting PlainWatch Poller..."
-# TODO: replace this with main.py once it becomes the process orchestrator.
-exec python "$script_dir/poller.py"
+python "$script_dir/poller.py" &
+poller_pid=$!
+
+echo "Starting PlainWatch Executor..."
+python "$script_dir/executor.py" &
+executor_pid=$!
+
+cleanup() {
+        kill "$poller_pid" "$executor_pid" 2>/dev/null || true
+        wait "$poller_pid" "$executor_pid" 2>/dev/null || true
+}
+
+trap cleanup EXIT INT TERM
+
+# Keep this launcher alive while both services run.
+wait "$poller_pid" "$executor_pid"
+
+echo

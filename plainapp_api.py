@@ -250,14 +250,16 @@ class PlainAppAPI:
         query = """
         query Note($id: ID!) {
             note(id: $id) {
-                id title content createdAt updatedAt trashed tags { id name }
+                id title content createdAt updatedAt tags { id name }
             }
         }
         """
-        return self.make_graphql_request(
+        note = self.make_graphql_request(
             query,
             {"id": note_id},
         )["data"]["note"]
+
+        return note
 
     def save_note(
         self,
@@ -289,9 +291,11 @@ if __name__ == "__main__":
     plainapp = PlainAppAPI()
     # print(plainapp.inspect_type_properties("Note"))
     
-    notes = plainapp.list_notes()
-    for note in notes:
-        print(f" {note['id']} | {note['title'][:5]} | {note['tags']} | {note['updatedAt']} | {note['createdAt']} | {note['deletedAt']}")
+    note = plainapp.get_note(note_id = "1iaxm1xigk3lf")
+    print(note)
+    # notes = plainapp.list_notes()
+    # for note in notes:
+    #     print(f" {note['id']} | {note['title'][:5]} | {note['tags']} | {note['updatedAt']} | {note['createdAt']} | {note['deletedAt']}")
     
     # save_response = plainapp.save_note(note_id="", 
     #                                 title="Sample Title",
