@@ -155,11 +155,12 @@ def dev_mode():
 
     # _clean_activity_logs()
 
-    _dev_tasksettohandoff()
+    # _dev_tasksettohandoff()
 
     # _drop_table("activity_notification_log")
+    # _drop_table("topics")
 
-    # _test()
+    _test()
     
 def _clean_activity_logs():
     """Delete all rows from the activity_notification_log table."""
@@ -190,7 +191,21 @@ def _drop_table(table_name):
 def _test():
     print("Running test queries...")
     #print query here to print all rows of activity_notification_log
-    rows = execute_query("SELECT * FROM activity_notification_log")
+    # query = "select * from activity_notification_log;"
+    query = "select * from topics;"
+
+    # query = f"""
+    #             SELECT MAX(finished_at) AS latest_finished_at
+    #             FROM activity_notification_log
+    #             WHERE note_id = 'qec69hogbwhj'
+    #                 AND json_valid(extra)
+    #                 AND EXISTS (
+    #                     SELECT 1
+    #                     FROM json_each(extra, '$.actions_run')
+    #                     WHERE json_each.value = 'keyword_refresh'
+    #                 );
+    #         """
+    rows = execute_query(query)
     for row in rows:
         print(tuple(row))
     pass

@@ -5,6 +5,7 @@ queues topics that are ready for an Activity run.
 """
 
 import time
+import os
 import logging
 import hashlib
 from logging.handlers import RotatingFileHandler
@@ -36,6 +37,11 @@ plainapp = plainapp_api.PlainAppAPI()
 POLL_INTERVAL_SECONDS = 5 # make it 15 * 60 later
 AUTO_GENERATED_MARKER = "---AUTO-GENERATED BELOW, DO NOT EDIT---"
 TRACKING_TAG = "tracking_stuff"
+DEFAULT_TOPIC_INTERVAL_SECONDS = int(
+    os.getenv("PLAINWATCH_TOPIC_INTERVAL_SECONDS", "3600")
+)
+if DEFAULT_TOPIC_INTERVAL_SECONDS <= 0:
+    raise ValueError("PLAINWATCH_TOPIC_INTERVAL_SECONDS must be positive")
 
 
 def refresh_feed_items():
@@ -94,17 +100,21 @@ def poll():
 
         db.execute_query(
             """
-            INSERT INTO topics (note_id, to_track_hash, status)
-            VALUES (?, ?, 'WAITING_TO_HANDOFF')
+            INSERT INTO topics (note_id, to_track_hash, status, next_run_at)
+            VALUES (?, ?, 'WAITING_TO_HANDOFF', ?)
             """,
-            (note["id"], hash_seed(note.get("content", ""))),
+            (
+                note["id"],
+                hash_seed(note.get("content", "")),
+                str(DEFAULT_TOPIC_INTERVAL_SECONDS),
+            ),
         )
         logger.info(
             "Added topic %s with status WAITING_TO_HANDOFF",
             note["id"],
         )
 
-    # TODO 4. Detect changed to_track_hash values and queue topics for reprocessing.
+    #(deprecated: moved this execution to executor.py) TODO 4. Detect changed to_track_hash values and queue topics for reprocessing.
 
     # 5. Count topics currently ready for handoff.
     idle_topics = db.execute_query(

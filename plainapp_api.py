@@ -288,13 +288,36 @@ class PlainAppAPI:
         return self.save_note(note_id, title, content)
 
 if __name__ == "__main__":
+    from datetime import datetime, timezone, timedelta
     plainapp = PlainAppAPI()
     # print(plainapp.inspect_type_properties("Note"))
     
-    note = plainapp.save_note(note_id="1iaxm1xigk3lf", 
-                              title="Sample Title", 
-                              content="Sample Content")
-    print(note)
+    # feedentry_id = 'u7p0tv1a75ma'
+    # resp = plainapp.fetch_feed_content(feed_entry_id=feedentry_id)
+    # print(resp)
+
+    feeds = plainapp.list_feed_entries(
+                    query_text='UPI India',
+                    page_size=100,
+                )
+    if feeds:
+        print(len(feeds))
+        print((feeds[0])['publishedAt'])
+        # apply a filter to only include feeds with published_at of yesterday's date
+        filtered_feeds = [
+            feed for feed in feeds
+            if "publishedAt" in feed and feed["publishedAt"].startswith((datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d"))
+        ]
+
+        print(len(filtered_feeds))
+    
+    
+    # note = plainapp.save_note(note_id="1iaxm1xigk3lf", 
+    #                           title="Sample Title", 
+    #                           content="Sample Content")
+    # print(note)
+
+
     # notes = plainapp.list_notes()
     # for note in notes:
     #     print(f" {note['id']} | {note['title'][:5]} | {note['tags']} | {note['updatedAt']} | {note['createdAt']} | {note['deletedAt']}")
