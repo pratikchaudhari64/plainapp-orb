@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS activity_notification_log (
     topic_id INTEGER NOT NULL,
     note_id TEXT NOT NULL,
     status TEXT NOT NULL
-        CHECK (status IN ('COMPLETED', 'FAILED')),
+        CHECK (status IN ('COMPLETED', 'FAILED', 'WORKING')),
     message TEXT,
     started_at TEXT NOT NULL DEFAULT (datetime('now')),
     finished_at TEXT,

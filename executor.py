@@ -124,7 +124,22 @@ async def run_forever():
                 task = await dispatch_topic(topic, semaphore)
                 if task is not None:
                     running_tasks.add(task)
-        logger.info(f"Completed Note Dispatch Cycle with {len(running_tasks)} running tasks.")
+        logger.info(f"Completed 'WAITING-TO-HANDOFF' Note Dispatch Cycle with {len(running_tasks)} running tasks.")
+
+        # idle_topics = db.execute_query(
+        #     """
+        #     SELECT id, note_id, to_track_hash, keywords, status, attempts,
+        #            last_run_at, next_run_at
+        #     FROM topics
+        #     WHERE status = 'IDLE'
+        #     ORDER BY id
+        #     """
+        # )
+
+        # if idle_topics:
+        #     for topic in idle_topics:
+        #         logger.info("Idle topic found: %s", topic["note_id"])
+
         await asyncio.sleep(EXECUTOR_INTERVAL_SECONDS)
 
 

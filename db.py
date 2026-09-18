@@ -6,6 +6,7 @@ import os
 import sqlite3
 import argparse
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -34,6 +35,17 @@ def connect() -> sqlite3.Connection:
     return connection
 
 
+def parse_datetime(value: str | datetime | None) -> datetime | None:
+    """Parse a stored UTC timestamp into a timezone-aware datetime."""
+    if value is None or isinstance(value, datetime):
+        return value
+
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
 def execute_query(query: str, params=()):
     """Execute one query and return rows or the affected-row count.
 
@@ -44,9 +56,22 @@ def execute_query(query: str, params=()):
     try:
         cursor = connection.execute(query, params)
         if cursor.description is not None:
-            return cursor.fetchall()
+            rows = cursor.fetchall()
+            connection.commit()
+            return rows
         connection.commit()
         return cursor.rowcount
+    finally:
+        connection.close()
+
+
+def execute_insert(query: str, params=()) -> int:
+    """Execute an INSERT and return its generated row ID."""
+    connection = connect()
+    try:
+        cursor = connection.execute(query, params)
+        connection.commit()
+        return cursor.lastrowid
     finally:
         connection.close()
 
@@ -128,7 +153,24 @@ def _get_schema() -> str:
 def dev_mode():
     """test dev queries"""
 
-    # print(_get_schema())
+    # _clean_activity_logs()
+
+    _dev_tasksettohandoff()
+
+    # _drop_table("activity_notification_log")
+
+    # _test()
+    
+def _clean_activity_logs():
+    """Delete all rows from the activity_notification_log table."""
+    # modfiy the query such that status='COMPLETED' and finished_at anything before last 30 days
+    db_resp = execute_query(
+        "DELETE FROM activity_notification_log WHERE status = 'COMPLETED' AND finished_at < datetime('now', '-30 days')"
+    )
+    print(db_resp, "\n")
+
+def _dev_tasksettohandoff():
+
     db_resp = execute_query(
         "UPDATE topics SET status = ?",
         ("WAITING_TO_HANDOFF",),
@@ -140,6 +182,18 @@ def dev_mode():
     for row in rows:
         print(tuple(row))
 
+def _drop_table(table_name):
+    """Delete all rows from the specified table."""
+    db_resp = execute_query(f"DROP TABLE IF EXISTS {table_name}")
+    print(db_resp, "\n")
+
+def _test():
+    print("Running test queries...")
+    #print query here to print all rows of activity_notification_log
+    rows = execute_query("SELECT * FROM activity_notification_log")
+    for row in rows:
+        print(tuple(row))
+    pass
 
 def main():
     parser = argparse.ArgumentParser(description="PlainWatch database utility")

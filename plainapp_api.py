@@ -291,7 +291,9 @@ if __name__ == "__main__":
     plainapp = PlainAppAPI()
     # print(plainapp.inspect_type_properties("Note"))
     
-    note = plainapp.get_note(note_id = "1iaxm1xigk3lf")
+    note = plainapp.save_note(note_id="1iaxm1xigk3lf", 
+                              title="Sample Title", 
+                              content="Sample Content")
     print(note)
     # notes = plainapp.list_notes()
     # for note in notes:
