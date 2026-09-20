@@ -140,7 +140,7 @@ class Harness:
                 # apply a filter to only include feeds with published_at of yesterday's date
                 filtered_feeds = [
                     feed for feed in feeds
-                    if "publishedAt" in feed and feed["publishedAt"].startswith((datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d"))
+                    if "publishedAt" in feed and feed["publishedAt"].startswith((datetime.now(timezone.utc) - timedelta(days=2)).strftime("%Y-%m-%d"))
                 ]
 
                 #syncing content and replacing the current value of it
@@ -153,12 +153,12 @@ class Harness:
                 logger.info(
                     "Total feeds available for keyword %r: %d",
                     keyword,
-                    len(feeds),
+                    len(filtered_feeds),
                 )
 
         timeline = await self._generate_timeline(kw_feeds, current_section=sections)
 
-
+        logger.info(f"Generated timeline for note. All keys: {timeline['status']} for {note['id']}")
         self._write_note(note, self._reassemble_note(timeline['new_sections']))
         message = {'actions_run': 'timeline_update'}
         return message
@@ -414,6 +414,47 @@ class Harness:
     ) -> dict[str, Any] | None:
         """Generate today's timeline block based on the current timeline block."""
 
+        pass1_system_prompt = f"""
+                    You extract signal from noisy RSS aggregate text.
+
+                    Input: concatenated content from multiple RSS feeds, separated by "<- NEW FEED CONTENT ->". This text contains advertisements, navigation boilerplate, cookie notices, newsletter prompts, and heavy duplication — the same story often appears several times from different sources with different wording.
+
+                    Your task:
+                    - Keep only content relevant to the stated keyword AND the user goal. Both must apply. Keyword-matching text that does not serve the goal is noise.
+                    - Merge duplicate reports of the same event into one statement. Do not repeat a fact because two sources carried it.
+                    - Preserve specifics: names, organizations, figures, dates, locations, official titles, stated positions. These are the value. Generic framing is not.
+                    - Attribute claims when sources disagree or when a claim is contested rather than established.
+                    - Discard advertisements, promotional copy, and site furniture entirely.
+
+                    If the content holds nothing relevant to both the keyword and the goal, reply exactly: NOTHING RELEVANT
+
+                    Never pad to reach a word count. Never infer or add anything not present in the supplied text.
+                    """
+
+        pass2_system_prompt = f"""
+                    You write a daily briefing entry for an evolving event timeline.
+
+                    You receive two things: today's extracted findings, and the existing timeline of what has already been reported. Your job is to identify what is genuinely new.
+
+                    Something is new if it is:
+                    - an event that has not appeared in the timeline
+                    - a material change to a previously reported event — an outcome, a reversal, a correction, a concrete figure replacing an estimate, a named actor replacing an unnamed one
+                    - a resolution of something the timeline left open
+
+                    Something is NOT new if it is:
+                    - a restatement of timeline content in different words
+                    - added colour, commentary, or reaction to an already-reported event
+                    - a source repeating an earlier report
+
+                    Apply this test strictly. A timeline padded with near-duplicates is worse than a short one. When genuinely uncertain whether an item is new, leave it out.
+
+                    If nothing passes the test, reply exactly: NO UPDATES
+                    Nothing else — no explanation, no preamble.
+
+                    Otherwise write 20-40 words, plain prose, no headings or bullets. Group related points into a single sentence rather than listing them separately. State developments directly; do not reference the timeline, the feeds, or your own process.
+                    """
+                
+
     # first condition, kw_feeds has {keywords: [list of feeds]}
     # if there are no feeds on any keyword, then return None immediately
         if not any(kw_feeds.values()):
@@ -428,18 +469,17 @@ class Harness:
 
             # return aggregate content summary for the keyword in first pass.
             
-            query = f"""Summarize the following content for User Goal of: {current_section['seed']}.
-            Similar keyword identified for the goal is: {kw}.
-            Return a concise summary of the relevant information extracted from the full feed content, in about 50-80 words.
-            Full feed content: {total_feed_content}"""
+            query = f"""
+                User goal: {current_section['seed']}
+                Keyword: {kw}
 
-            system = f"""You are being provided the agggregated feeds content for the keyword '{kw}'. 
-            These feeds are sourced from various RSS feed sources, and will have actual content + certain advertisements embedded within them.
-            You job is to look through entire content passed to you, and summarize the information relevant to the keyword provided in the query
-            and the user goal provided, ignoring any irrelevant content such as advertisements.
-            Also, certain content/information across the full content space will be redundant or repeatable, so focus on extracting unique and relevant information.
-            Basically, from the huge content provided, extract and summarize only the information that is relevant to the keyword and the user goal.
+                Summarize what the content below reports that is relevant to this goal, in 50-80 words. Lead with the most consequential development. Plain prose, no headings, no bullets.
+
+                Content:
+                {total_feed_content}
             """
+
+            system = pass1_system_prompt
 
             response = await self.use_llm.get_llm_response(
                 query=query,
@@ -451,24 +491,27 @@ class Harness:
 
             kw_content_summary[kw] = response
 
-        total_content_summary_of_kw = "\n".join(kw_content_summary.values())
+        relevant = [
+            s for s in kw_content_summary.values()
+            if s and s.strip().upper() != "NOTHING RELEVANT"
+            ]
+        if not relevant:
+            return None
+        total_content_summary_of_kw = "\n".join(relevant)
 
         query = f"""
-        Below is today's report of learned events related to the user goal of: {current_section['seed']}.
+            User goal: {current_section['seed']}
 
-        And this is the current timeline of events related to the feeds content: {current_section['timeline_blocks']}
-        Read through the content thoroughly and return back with a crisp summary that would serve as a quick daily briefing.
-        It should align with what the user has asked for, and on comparing with past events, if nothing new is found, just mention "NO UPDATES".
-        And should talk and group the information logically based on the topics/themes available.
-        Full feed content: {total_content_summary_of_kw}"""
+            Already reported (existing timeline):
+            {current_section['timeline_blocks']}
+
+            Today's findings:
+            {total_content_summary_of_kw}
+
+            Write today's timeline entry, or NO UPDATES.
+            """
         
-        system = f"""You are being provided the aggregated feeds content for the keyword '{kw}'.
-        Also, you will are provided wit the current timeline of events related to the feeds content.
-        The timeline of events should be considered while summarizing the content so that redundant issues are not highlighted.
-        If nothing new to report, just reply "NO UPDATES"
-        The final brief should be 20-40 words STRICTLY if there is anything new to report.
-        Basically, from the huge content provided, extract and summarize only the information that is relevant to the keyword and the user goal.
-        """
+        system = pass2_system_prompt
 
         response = await self.use_llm.get_llm_response(
             query=query,

@@ -17,7 +17,7 @@ EXECUTOR_INTERVAL_SECONDS=3
 
 PLAINWATCH_DB_PATH=plainwatch.db
 
-OPENROUTER_API_KEY<openrouter API key>
+OPENROUTER_API_KEY=<openrouter API key>
 OPENROUTER_MODEL=openai/gpt-5.6-luna
 
 TIMELINE_MARKER=## Timeline

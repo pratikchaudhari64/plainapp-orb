@@ -1,0 +1,17 @@
+[Unit]
+Description=PlainWatch
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=opc
+WorkingDirectory=/opt/plainapp-orb
+EnvironmentFile=/opt/plainapp-orb/.env
+ExecStart=/bin/bash /opt/plainapp-orb/runapp.sh
+Restart=on-failure
+RestartSec=60
+SuccessExitStatus=143
+
+[Install]
+WantedBy=multi-user.target
