@@ -19,7 +19,9 @@ CREATE TABLE IF NOT EXISTS topics (
             'STOPPED'
         )),
     attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+    -- last_run_at stores the UTC timestamp when the activity completed.
     last_run_at TEXT,
+    -- Despite its name, next_run_at stores the schedule interval in seconds as text.
     next_run_at TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -45,6 +47,9 @@ CREATE TABLE IF NOT EXISTS activity_notification_log (
     status TEXT NOT NULL
         CHECK (status IN ('COMPLETED', 'FAILED', 'WORKING')),
     message TEXT,
+    -- JSON metadata produced during the activity run.
+    extra TEXT NOT NULL DEFAULT '{}'
+        CHECK (json_valid(extra)),
     started_at TEXT NOT NULL DEFAULT (datetime('now')),
     finished_at TEXT,
     FOREIGN KEY (topic_id) REFERENCES topics (id) ON DELETE CASCADE
