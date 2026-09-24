@@ -15,15 +15,26 @@ fail() {
   exit 1
 }
 
-# copy project to /opt
+# stop the service before deploying new version
 sudo systemctl stop "$SVC" || true
-sudo rm -f "$DEST"/plainwatch.db-wal "$DEST"/plainwatch.db-shm
 sudo mkdir -p "$DEST"
-sudo cp -r "$SRC"/. "$DEST"/
+
+# Seed the database only on the first deployment; preserve the live database afterward.
+if [[ ! -f "$DEST/plainwatch.db" && -f "$SRC/plainwatch.db" ]]; then
+  sudo cp "$SRC/plainwatch.db" "$DEST/plainwatch.db"
+fi
+
+# copy all except: DB, venv
+sudo rsync -a --delete \
+  --exclude='plainwatch.db' \
+  --exclude='plainwatch.db-wal' \
+  --exclude='plainwatch.db-shm' \
+  --exclude='.venv/' \
+  "$SRC"/ "$DEST"/
 sudo chown -R opc:opc "$DEST"
 sudo restorecon -RF "$DEST"
 
-# fresh venv + packages
+# venv + packages
 rm -rf "$DEST/.venv"
 python3 -m venv "$DEST/.venv"
 "$DEST/.venv/bin/pip" install -r "$DEST/requirements.txt"
