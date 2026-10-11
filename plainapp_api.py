@@ -292,24 +292,33 @@ if __name__ == "__main__":
     plainapp = PlainAppAPI()
     # print(plainapp.inspect_type_properties("Note"))
     
+    # resp = plainapp.sync_feeds(feed_id="")
+    # print(resp)
+    
+    feeds = plainapp.list_feed_entries(
+                    query_text='Manchester City',
+                    page_size=100,
+                )
+    print(f"{feeds[0]['id']} | {feeds[0]['title']} | {feeds[0]['content']}")
+
     # feedentry_id = 'u7p0tv1a75ma'
     # resp = plainapp.fetch_feed_content(feed_entry_id=feedentry_id)
     # print(resp)
 
-    feeds = plainapp.list_feed_entries(
-                    query_text='UPI India',
-                    page_size=100,
-                )
-    if feeds:
-        print(len(feeds))
-        print((feeds[0])['publishedAt'])
-        # apply a filter to only include feeds with published_at of yesterday's date
-        filtered_feeds = [
-            feed for feed in feeds
-            if "publishedAt" in feed and feed["publishedAt"].startswith((datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d"))
-        ]
+    # feeds = plainapp.list_feed_entries(
+    #                 query_text='UPI India',
+    #                 page_size=100,
+    #             )
+    # if feeds:
+    #     print(len(feeds))
+    #     print((feeds[0])['publishedAt'])
+    #     # apply a filter to only include feeds with published_at of yesterday's date
+    #     filtered_feeds = [
+    #         feed for feed in feeds
+    #         if "publishedAt" in feed and feed["publishedAt"].startswith((datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d"))
+    #     ]
 
-        print(len(filtered_feeds))
+    #     print(len(filtered_feeds))
     
     
     # note = plainapp.save_note(note_id="1iaxm1xigk3lf", 

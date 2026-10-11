@@ -394,6 +394,7 @@ class Harness:
         }
 
         todays_block = await self._generate_todays_block(kw_feeds, current_section)
+        logger.info(f"todays_block: {todays_block[:40]}")
 
         if todays_block and todays_block != "NO UPDATES":
             # add todays date in form : <mark>highlighted text</mark> as the top line of todays' block
@@ -485,7 +486,7 @@ class Harness:
                 query=query,
                 system=system,
                 temperature=0,
-                max_tokens=7000,
+                max_tokens=12000,
                 web_search=False,
                 )
 
@@ -523,4 +524,21 @@ class Harness:
 
 
         return response
+
+if __name__ == "__main__":
+
+    import logging
+    import asyncio
+    import plainapp_api, db, use_llm
+
+    logging.basicConfig(level=logging.INFO)
+
+    plainapp_api = plainapp_api.PlainAppAPI()
+    use_llm = use_llm.UseLLM()
+    harness = Harness(plainapp_api, use_llm)
+
+    resp = asyncio.run(harness.execute(note_id='soneq7v3su2b'))
+
+    print(resp)
+
         
