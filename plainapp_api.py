@@ -163,6 +163,60 @@ class PlainAppAPI:
             raise ValueError(f"GraphQL type does not exist: {type_name}")
         return type_info
 
+    def list_database_tables(self) -> list[str]:
+        """Return the names of all tables in PlainApp's SQLite database."""
+        query = """
+        query GetDbTables {
+            dbTables
+        }
+        """
+        return self.make_graphql_request(query)["data"]["dbTables"]
+
+    def list_raw_table_rows(
+        self,
+        table: str,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """Return all rows from a database table through paginated raw access.
+
+        Args:
+            table: Exact database table name, as returned by
+                :meth:`list_database_tables`.
+            offset: Number of rows to skip before the first returned row.
+            limit: Maximum number of rows requested per API call. This is sent
+                to PlainApp as the documented ``limit`` argument.
+
+        Returns:
+            A list of row objects mapping column names to values.
+        """
+        if offset < 0:
+            raise ValueError("offset must be zero or greater")
+        if limit <= 0:
+            raise ValueError("limit must be greater than zero")
+
+        query = """
+        query GetDbTableRows($table: String!, $offset: Int!, $limit: Int!) {
+            dbTableRows(table: $table, offset: $offset, limit: $limit)
+        }
+        """
+        rows: list[dict[str, Any]] = []
+
+        while True:
+            page = self.make_graphql_request(
+                query,
+                {
+                    "table": table,
+                    "offset": offset,
+                    "limit": limit,
+                },
+            )["data"]["dbTableRows"]
+            rows.extend(page)
+
+            if len(page) < limit:
+                return rows
+            offset += limit
+
     def sync_feeds(self, feed_id: str | None = None) -> Any:
         """Ask PlainApp to refresh one feed or all feeds."""
         query = """
@@ -289,17 +343,33 @@ class PlainAppAPI:
 
 if __name__ == "__main__":
     from datetime import datetime, timezone, timedelta
+    import json
     plainapp = PlainAppAPI()
     # print(plainapp.inspect_type_properties("Note"))
     
+    resp = plainapp.list_raw_table_rows(table='feed_entries',
+                                        offset = 27540,
+                                        limit = 2000)
+    cnt = 0
+    print(f"Total feeds fetched: {len(resp)}")
+    for feed in resp:
+        feed = json.loads(feed)
+        print(f"\n {feed['title'][:15]} | {feed['created_at']}")
+        cnt += 1
+        if cnt >= 10:
+            break
+        
+
+    # resp = plainapp.list_database_tables()
+    # print(resp)
     # resp = plainapp.sync_feeds(feed_id="")
     # print(resp)
     
-    feeds = plainapp.list_feed_entries(
-                    query_text='Manchester City',
-                    page_size=100,
-                )
-    print(f"{feeds[0]['id']} | {feeds[0]['title']} | {feeds[0]['content']}")
+    # feeds = plainapp.list_feed_entries(
+    #                 query_text='Football',
+    #                 page_size=100,
+    #             )
+    # print(f"{feeds[0].keys()}")
 
     # feedentry_id = 'u7p0tv1a75ma'
     # resp = plainapp.fetch_feed_content(feed_entry_id=feedentry_id)
