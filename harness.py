@@ -60,9 +60,11 @@ class Harness:
         keywords = json.loads(topic['keywords'])
 
         if "FETCHFEEDS" in keywords:
-            await self._sync_daily_feed_entries()
+            return await self._sync_daily_feed_entries()
+
+        else:
+            return {"actions_run": "None of the permissible keywords found"}
         
-        return {"actions_run": []}
 
     async def _execute_note(self, note_id: str, topic: dict[str, Any]) -> dict[str, Any]:
         """Run the existing PlainApp note workflow."""
@@ -74,14 +76,130 @@ class Harness:
 
         return harness_message
 
-    async def _sync_daily_feed_entries(self):
-        """Synchronize daily feed entries for SYSTEM internals."""
-        # Implement the logic for syncing daily feeds
+    async def _sync_daily_feed_entries(self) -> dict[str, Any]:
+        """Synchronize today's feed entries using the India Standard Time day."""
+        ist = timezone(timedelta(hours=5, minutes=30))
+        now_ist = datetime.now(timezone.utc).astimezone(ist)
+        today_ist = now_ist.date()
 
-        resp = self.plainapp_api.fetch_all_raw_table_rows(table='feed_entries')
-        print("\n \n Fetched daily feed entries: %d \n", len(resp))
+        resp = self.plainapp_api.fetch_all_raw_table_rows(
+            table="feed_entries",
+            limit=200,
+        )
 
-        pass
+        clear_previous_day = now_ist.hour == 0
+        start_of_day_utc = now_ist.replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ).astimezone(timezone.utc)
+        if clear_previous_day:
+            existing_rows = db.execute_query(
+                """
+                SELECT plainapp_feed_item_id
+                FROM feed_items
+                WHERE fetched_at >= ?
+                """,
+                (start_of_day_utc.strftime("%Y-%m-%d %H:%M:%S"),),
+            )
+        else:
+            existing_rows = db.execute_query(
+                "SELECT plainapp_feed_item_id FROM feed_items"
+            )
+        existing_ids = {row["plainapp_feed_item_id"] for row in existing_rows}
+
+        today_rows: list[tuple[datetime, str, str, str]] = []
+        invalid_rows = 0
+        today_feed_count = 0
+        existing_feed_count = 0
+        for raw_feed in resp:
+            try:
+                feed = json.loads(raw_feed) if isinstance(raw_feed, str) else raw_feed
+            except json.JSONDecodeError:
+                invalid_rows += 1
+                continue
+
+            if not isinstance(feed, dict):
+                invalid_rows += 1
+                continue
+
+            item_id = feed.get("id")
+            published_at = feed.get("published_at")
+            if item_id is None or not isinstance(published_at, str):
+                invalid_rows += 1
+                continue
+
+            try:
+                published_datetime = datetime.fromisoformat(
+                    published_at.replace("Z", "+00:00")
+                )
+            except ValueError:
+                invalid_rows += 1
+                continue
+
+            if published_datetime.tzinfo is None:
+                published_datetime = published_datetime.replace(tzinfo=timezone.utc)
+            if published_datetime.astimezone(ist).date() != today_ist:
+                continue
+
+            today_feed_count += 1
+            item_id = str(item_id)
+            if item_id in existing_ids:
+                existing_feed_count += 1
+                continue
+            existing_ids.add(item_id)
+
+            fetched_content = self.plainapp_api.fetch_feed_content(feed_entry_id = item_id)
+            if isinstance(fetched_content, dict) and fetched_content:
+                content = fetched_content.get("content", "")
+            else:
+                content = ""
+            if not isinstance(content, str):
+                content = ""
+
+            today_rows.append(
+                (published_datetime, item_id, content, published_at)
+            )
+
+        today_rows.sort(key=lambda row: row[0], reverse=True)
+        fetched_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        feed_item_values = [
+            (item_id, content, published_at, fetched_at)
+            for _, item_id, content, published_at in today_rows
+        ]
+
+        deleted_old_rows = 0
+        connection = db.connect()
+        try:
+            with connection:
+                if clear_previous_day:
+                    cursor = connection.execute(
+                        "DELETE FROM feed_items WHERE fetched_at < ?",
+                        (start_of_day_utc.strftime("%Y-%m-%d %H:%M:%S"),),
+                    )
+                    deleted_old_rows = cursor.rowcount
+
+                connection.executemany(
+                    """
+                    INSERT OR IGNORE INTO feed_items
+                        (plainapp_feed_item_id, content, published_at, fetched_at)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    feed_item_values,
+                )
+        finally:
+            connection.close()
+
+        if invalid_rows:
+            logger.warning("Skipped %d invalid feed rows", invalid_rows)
+
+        return {
+            "actions_run": "fetch_daily_feed_entries",
+            "source_rows": len(resp),
+            "today_rows": today_feed_count,
+            "existing_rows_skipped": existing_feed_count,
+            "inserted_rows": len(feed_item_values),
+            "deleted_old_rows": deleted_old_rows,
+            "invalid_rows": invalid_rows,
+        }
 
     async def run_keyword_refresh(self, note_id: str) -> dict[str, Any]:
         """Refresh the keyword section without changing the timeline section."""
