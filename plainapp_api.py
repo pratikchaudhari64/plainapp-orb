@@ -178,17 +178,17 @@ class PlainAppAPI:
         offset: int = 0,
         limit: int = 100,
     ) -> list[dict[str, Any]]:
-        """Return all rows from a database table through paginated raw access.
+        """Return one page of rows from a database table.
 
         Args:
             table: Exact database table name, as returned by
                 :meth:`list_database_tables`.
             offset: Number of rows to skip before the first returned row.
-            limit: Maximum number of rows requested per API call. This is sent
-                to PlainApp as the documented ``limit`` argument.
+            limit: Maximum number of rows to return. This is sent to PlainApp
+                as the documented ``limit`` argument.
 
         Returns:
-            A list of row objects mapping column names to values.
+            A page of row objects mapping column names to values.
         """
         if offset < 0:
             raise ValueError("offset must be zero or greater")
@@ -200,17 +200,40 @@ class PlainAppAPI:
             dbTableRows(table: $table, offset: $offset, limit: $limit)
         }
         """
-        rows: list[dict[str, Any]] = []
+        return self.make_graphql_request(
+            query,
+            {
+                "table": table,
+                "offset": offset,
+                "limit": limit,
+            },
+        )["data"]["dbTableRows"]
 
+    def fetch_all_raw_table_rows(
+        self,
+        table: str,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """Fetch all rows from a database table using paginated raw access.
+
+        Args:
+            table: Exact database table name, as returned by
+                :meth:`list_database_tables`.
+            offset: Number of rows to skip before the first returned row.
+            limit: Maximum number of rows requested per API call.
+
+        Returns:
+            All row objects from the requested offset onward.
+        """
+        if offset < 0:
+            raise ValueError("offset must be zero or greater")
+        if limit <= 0:
+            raise ValueError("limit must be greater than zero")
+
+        rows: list[dict[str, Any]] = []
         while True:
-            page = self.make_graphql_request(
-                query,
-                {
-                    "table": table,
-                    "offset": offset,
-                    "limit": limit,
-                },
-            )["data"]["dbTableRows"]
+            page = self.list_raw_table_rows(table, offset=offset, limit=limit)
             rows.extend(page)
 
             if len(page) < limit:
@@ -344,20 +367,31 @@ class PlainAppAPI:
 if __name__ == "__main__":
     from datetime import datetime, timezone, timedelta
     import json
+    import time
     plainapp = PlainAppAPI()
     # print(plainapp.inspect_type_properties("Note"))
     
-    resp = plainapp.list_raw_table_rows(table='feed_entries',
-                                        offset = 27540,
-                                        limit = 2000)
+    # resp = plainapp.list_raw_table_rows(table='feeds',
+    #                                     offset = 0,
+    #                                     limit = 2)
+
+    resp = plainapp.fetch_all_raw_table_rows(table='feed_entries')
     cnt = 0
+    start_time = time.time()
     print(f"Total feeds fetched: {len(resp)}")
+    #memory taken by the variable resp in MB
+    import sys
+
+    total_bytes = sys.getsizeof(resp) + sum(sys.getsizeof(item) for item in resp)
+    print(f"Approx. resp memory: {total_bytes / (1024 * 1024):.2f} MB")
     for feed in resp:
         feed = json.loads(feed)
-        print(f"\n {feed['title'][:15]} | {feed['created_at']}")
+        print(f"\n {feed}")
         cnt += 1
         if cnt >= 10:
             break
+    end_time = time.time()
+    print(f"Time taken: {end_time - start_time} seconds")
         
 
     # resp = plainapp.list_database_tables()
