@@ -7,7 +7,7 @@ import logging
 import re
 from pathlib import Path
 from typing import Any
-
+import json
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
@@ -46,16 +46,42 @@ class Harness:
         self.plainapp_api = plainapp_api
         self.use_llm = use_llm
 
-    async def execute(self, note_id: str):
+    async def execute(self, note_id: str, topic: dict[str, Any]):
+        """Route system topics separately from PlainApp note topics."""
+        if note_id == "SYSTEM":
+            return await self._execute_system_task(topic)
+        else:
+            return await self._execute_note(note_id, topic)
 
+
+    async def _execute_system_task(self, topic: dict[str, Any]) -> dict[str, Any]:
+        """Placeholder for internal system-topic handling."""
+
+        keywords = json.loads(topic['keywords'])
+
+        if "FETCHFEEDS" in keywords:
+            await self._sync_daily_feed_entries()
+        
+        return {"actions_run": []}
+
+    async def _execute_note(self, note_id: str, topic: dict[str, Any]) -> dict[str, Any]:
+        """Run the existing PlainApp note workflow."""
         ref_keyword_resp = await self.run_keyword_refresh(note_id=note_id)
-        # ref_keyword_resp={}
-        # ref_keyword_resp['actions_run'] = ''
+        
         run_timeline_resp = await self.run_timeline_update(note_id=note_id, feed_items=[])
 
         harness_message = {'actions_run': [ref_keyword_resp['actions_run'], run_timeline_resp['actions_run']]}
 
         return harness_message
+
+    async def _sync_daily_feed_entries(self):
+        """Synchronize daily feed entries for SYSTEM internals."""
+        # Implement the logic for syncing daily feeds
+
+        resp = self.plainapp_api.fetch_all_raw_table_rows(table='feed_entries')
+        print("\n \n Fetched daily feed entries: %d \n", len(resp))
+
+        pass
 
     async def run_keyword_refresh(self, note_id: str) -> dict[str, Any]:
         """Refresh the keyword section without changing the timeline section."""

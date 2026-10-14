@@ -97,6 +97,41 @@ def initialize_database() -> None:
 
     print(f"Database ready: {DB_PATH}")
 
+    _add_system_topics()
+
+def _add_system_topics() -> None:
+    """Add or update system topics in the topics table."""
+
+    # NOTE: more topics of various kinds can be added later, and perhaps also be made env variables
+    system_topics = [
+        {
+            "note_id": "SYSTEM",
+            "to_track_hash": "",
+            "keywords": '["FETCHFEEDS"]',
+            "status": "IDLE",
+            "next_run_at": "5",
+        },
+    ]
+
+    for topic in system_topics:
+        execute_query(
+            """
+            INSERT INTO topics
+                (note_id, to_track_hash, keywords, status, next_run_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(note_id) DO UPDATE SET
+                to_track_hash = excluded.to_track_hash,
+                keywords = excluded.keywords,
+                next_run_at = excluded.next_run_at
+            """,
+            (
+                topic["note_id"],
+                topic["to_track_hash"],
+                topic["keywords"],
+                topic["status"],
+                topic["next_run_at"],
+            ),
+        )
 
 
 def database_is_ready() -> bool:

@@ -80,7 +80,7 @@ class Activity:
         last_run_at = db.parse_datetime(self.topic["last_run_at"])
         try:
             
-            harness_response = await self.harness.execute(note_id=note_id)
+            harness_response = await self.harness.execute(note_id=note_id, topic=self.topic)
 
             finished_at = datetime.now(timezone.utc).strftime(
                 "%Y-%m-%d %H:%M:%S"
