@@ -81,7 +81,9 @@ def poll():
     active_note_ids = {note["id"] for note in tracking_notes}
 
     # 2. Load stored topic IDs and remove topics no longer active.
-    stored_topics = db.execute_query("SELECT note_id FROM topics")
+    stored_topics = db.execute_query(
+        "SELECT note_id FROM topics WHERE keywords = '[]'"
+    )
     stored_note_ids = {row["note_id"] for row in stored_topics}
 
     removed_note_ids = stored_note_ids - active_note_ids
